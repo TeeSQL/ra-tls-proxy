@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# pre-push hook: reject any commit containing AI attribution.
+# "Co-Authored-By: Claude" must never appear in commit messages.
+# See CLAUDE.md for project guidelines.
+
+while IFS=" " read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip deletions
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  while IFS= read -r commit; do
+    if git log -1 --format="%B" "$commit" | grep -qi "co-authored-by:.*claude"; then
+      echo "ERROR: commit $commit contains AI attribution (Co-Authored-By: Claude)."
+      echo "Remove the line before pushing. See CLAUDE.md for guidelines."
+      exit 1
+    fi
+  done < <(git rev-list "$range" 2>/dev/null)
+done
+
+exit 0
