@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# pre-commit hook: enforce GPG signing is configured before allowing a commit.
+# See CLAUDE.md for project guidelines.
+
+gpgsign=$(git config --get commit.gpgsign 2>/dev/null)
+signingkey=$(git config --get user.signingkey 2>/dev/null)
+
+if [ "$gpgsign" != "true" ]; then
+  echo "ERROR: commit.gpgsign is not set to true."
+  echo "Run: git config commit.gpgsign true"
+  exit 1
+fi
+
+if [ -z "$signingkey" ]; then
+  echo "ERROR: user.signingkey is not configured."
+  echo "Run: git config user.signingkey <your-key-id>"
+  exit 1
+fi
+
+if ! gpg --list-secret-keys "$signingkey" > /dev/null 2>&1; then
+  echo "ERROR: GPG key \"$signingkey\" is not available in your keyring."
+  echo "Ensure your signing key is imported and unlocked."
+  exit 1
+fi
+
+exit 0
