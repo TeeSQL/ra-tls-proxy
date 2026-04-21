@@ -24,7 +24,7 @@
 //!         backend_addr: "127.0.0.1:5432".parse()?,
 //!         server_key_pem: std::fs::read_to_string("server.key")?,
 //!         server_cert_chain_pem: vec![std::fs::read_to_string("server.crt")?],
-//!         require_client_cert: true,
+//!         client_root_ca_pem: Some(std::fs::read_to_string("client-ca.crt")?),
 //!     };
 //!     run_proxy(config).await
 //! }
@@ -49,9 +49,14 @@ pub struct ProxyConfig {
     /// Server certificate chain in PEM format. One PEM string per cert,
     /// ordered leaf → intermediate → root (standard TLS chain order).
     pub server_cert_chain_pem: Vec<String>,
-    /// When `true`, clients must present a valid certificate signed by the
-    /// same CA as the server cert (mutual TLS / mTLS). Default: `true`.
-    pub require_client_cert: bool,
+    /// When `Some`, enables mutual TLS: clients must present a certificate
+    /// signed by this explicitly-pinned root CA (PEM-encoded). When `None`,
+    /// mTLS is disabled and any client may connect.
+    ///
+    /// The root CA must be provided separately from the server chain to
+    /// prevent certificate-chain manipulation attacks (see the security fix
+    /// in ra-tls-parse requiring an explicitly known CA).
+    pub client_root_ca_pem: Option<String>,
 }
 
 impl Default for ProxyConfig {
@@ -61,7 +66,7 @@ impl Default for ProxyConfig {
             backend_addr: "127.0.0.1:5432".parse().expect("valid default addr"),
             server_key_pem: String::new(),
             server_cert_chain_pem: Vec::new(),
-            require_client_cert: true,
+            client_root_ca_pem: None,
         }
     }
 }
@@ -88,7 +93,7 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
     let private_key = ra_tls_parse::parse_private_key(&config.server_key_pem)
         .context("failed to parse server private key")?;
 
-    let tls_config = build_tls_config(certs, private_key, config.require_client_cert)?;
+    let tls_config = build_tls_config(certs, private_key, config.client_root_ca_pem.as_deref())?;
     let acceptor = TlsAcceptor::from(Arc::new(tls_config));
     let listener = TcpListener::bind(config.listen_addr)
         .await
@@ -119,10 +124,15 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
 fn build_tls_config(
     certs: Vec<rustls_pki_types::CertificateDer<'static>>,
     private_key: rustls_pki_types::PrivateKeyDer<'static>,
-    require_client_cert: bool,
+    client_root_ca_pem: Option<&str>,
 ) -> Result<rustls::ServerConfig> {
-    if require_client_cert {
-        let root_store = ra_tls_parse::build_root_store(&certs)
+    if let Some(ca_pem) = client_root_ca_pem {
+        let ca_certs = ra_tls_parse::parse_certificates(ca_pem)
+            .context("failed to parse client_root_ca_pem")?;
+        let root_ca = ca_certs
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("client_root_ca_pem contained no certificates"))?;
+        let root_store = ra_tls_parse::build_root_store_with_known_ca(root_ca)
             .context("failed to build root cert store for client verification")?;
         let client_verifier = rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
             .build()

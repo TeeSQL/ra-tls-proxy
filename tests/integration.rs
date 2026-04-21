@@ -43,7 +43,7 @@ async fn run_proxy_empty_pem_returns_error() {
         backend_addr: "127.0.0.1:9999".parse().unwrap(),
         server_key_pem: String::new(),
         server_cert_chain_pem: vec![],
-        require_client_cert: false,
+        client_root_ca_pem: None,
     };
     let result = run_proxy(config).await;
     assert!(result.is_err(), "expected error for empty PEM");
@@ -83,7 +83,7 @@ async fn server_only_tls_echo() {
         backend_addr: echo_addr,
         server_key_pem: server_key_pem.clone(),
         server_cert_chain_pem: vec![server_cert_pem.clone()],
-        require_client_cert: false,
+        client_root_ca_pem: None,
     };
     tokio::spawn(run_proxy(config));
 
@@ -127,7 +127,7 @@ async fn invalid_key_pem_returns_error() {
         backend_addr: "127.0.0.1:9999".parse().unwrap(),
         server_key_pem: "not a valid pem key".to_string(),
         server_cert_chain_pem: vec![server_cert_pem],
-        require_client_cert: false,
+        client_root_ca_pem: None,
     };
     let result = run_proxy(config).await;
     assert!(result.is_err(), "expected error for invalid key PEM");
@@ -153,7 +153,7 @@ async fn invalid_cert_pem_returns_error() {
         backend_addr: "127.0.0.1:9999".parse().unwrap(),
         server_key_pem,
         server_cert_chain_pem: vec!["not a valid cert pem".to_string()],
-        require_client_cert: false,
+        client_root_ca_pem: None,
     };
     let result = run_proxy(config).await;
     assert!(result.is_err(), "expected error for invalid cert PEM");

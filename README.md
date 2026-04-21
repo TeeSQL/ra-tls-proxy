@@ -40,6 +40,10 @@ async fn main() -> anyhow::Result<()> {
     let server_key_pem = std::fs::read_to_string("server.key")?;
     let server_cert_pem = std::fs::read_to_string("server.crt")?;
 
+    // Root CA that client certs must be signed by (mTLS). Must be pinned
+    // explicitly by the caller — see the security note below.
+    let client_root_ca_pem = std::fs::read_to_string("client-ca.crt")?;
+
     let config = ProxyConfig {
         // Address this proxy listens on (TLS)
         listen_addr: "0.0.0.0:5433".parse()?,
@@ -49,8 +53,9 @@ async fn main() -> anyhow::Result<()> {
         server_key_pem,
         // Certificate chain PEM, one string per cert, leaf -> root order
         server_cert_chain_pem: vec![server_cert_pem],
-        // true = require client cert (mTLS); false = server-only TLS
-        require_client_cert: true,
+        // Some(pem) = require client cert signed by this CA (mTLS);
+        // None = server-only TLS
+        client_root_ca_pem: Some(client_root_ca_pem),
     };
 
     // Runs forever, spawning a tokio task per accepted connection
@@ -62,10 +67,18 @@ async fn main() -> anyhow::Result<()> {
 
 ```rust
 let config = ProxyConfig {
-    require_client_cert: false,
+    client_root_ca_pem: None,
     ..ProxyConfig::default()  // fill in addrs and PEM fields
 };
 ```
+
+### Security note: explicit client root CA
+
+As of the 2026-04 security fix in `ra-tls-parse`, the root CA used to verify
+client certificates must be provided explicitly via `client_root_ca_pem`
+rather than inferred from the server's own certificate chain. Inferring the
+root from the chain allowed certificate-chain manipulation attacks — pin the
+CA you actually trust and pass it in.
 
 ### Default addresses
 
