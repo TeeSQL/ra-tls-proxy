@@ -10,7 +10,7 @@ keywords = ["ra-tls", "tls", "proxy", "tee", "attestation"]
 categories = ["network-programming", "cryptography"]
 
 [dependencies]
-ra-tls-parse = { git = "https://github.com/TeeSQL/ra-tls-parse", branch = "main" }
+ra-tls-parse = { git = "https://github.com/TeeSQL/ra-tls-parse", rev = "dccf275f0082b587f90139be95f17eae38ced874" }
 rustls = "0.23"
 rustls-pki-types = "1"
 tokio = { version = "1", features = ["full"] }
